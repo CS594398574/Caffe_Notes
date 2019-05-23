@@ -1,0 +1,111 @@
+#-*-coding:utf-8-*-
+import numpy as np
+import caffe
+import matplotlib.pyplot as plt
+import cv2 as cv
+
+caffe_root = '/home/hjl/GoogleNet/'
+
+net = caffe.Net(caffe_root+"deploy.prototxt",
+                caffe_root+"_iter__iter_10001.caffemodel",
+                caffe.TEST)
+for k,v in net.params.items():
+    print (k, v[0].data.shape)
+
+print net.blobs['data'].data.shape
+
+im = caffe.io.load_image('/home/hjl/video/280.jpg')
+print im.shape   #(152,158,3)
+plt.imshow(im)
+plt.axis('off')
+plt.show()
+def convert_mean(binMean,npyMean):
+    blob = caffe.proto.caffe_pb2.BlobProto()
+    bin_mean = open(binMean, 'rb' ).read()
+    blob.ParseFromString(bin_mean)
+    arr = np.array( caffe.io.blobproto_to_array(blob) )
+    npy_mean = arr[0]
+    np.save(npyMean, npy_mean )
+binMean=caffe_root+'mean.binaryproto'
+npyMean=caffe_root+'mean.npy'
+#convert_mean(binMean,npyMean)
+
+
+
+#将图片载入blob中,并减去均值
+transformer = caffe.io.Transformer({'data': net.blobs['data'].data.shape})
+transformer.set_transpose('data', (2,0,1))
+transformer.set_mean('data', np.load(npyMean).mean(1).mean(1)) # 减去均值
+transformer.set_raw_scale('data', 255)
+transformer.set_channel_swap('data', (2,1,0))
+net.blobs['data'].data[...] = transformer.preprocess('data',im)
+inputData=net.blobs['data'].data
+
+#显示减去均值前后的数据
+plt.figure()
+plt.subplot(1,2,1),plt.title("origin")
+plt.imshow(im)
+plt.axis('off')
+plt.subplot(1,2,2),plt.title("subtract mean")
+plt.imshow(transformer.deprocess('data', inputData[0]))
+plt.axis('off')
+plt.show()
+
+net.forward()
+# 　编写一个函数，用于显示各层数据
+def show_data(data, padsize=1, padval=0):
+    data -= data.min()
+    data /= data.max()
+
+    # force the number of filters to be square
+    n = int(np.ceil(np.sqrt(data.shape[0])))
+    padding = ((0, n ** 2 - data.shape[0]), (0, padsize), (0, padsize)) + ((0, 0),) * (data.ndim - 3)
+    data = np.pad(data, padding, mode='constant', constant_values=(padval, padval))
+
+    # tile the filters into an image
+    data = data.reshape((n, n) + data.shape[1:]).transpose((0, 2, 1, 3) + tuple(range(4, data.ndim + 1)))
+    data = data.reshape((n * data.shape[1], n * data.shape[3]) + data.shape[4:])
+    plt.figure()
+    plt.imshow(data, cmap='gray')
+    plt.axis('off')
+
+
+# 　编写一个函数，用于显示各层数据
+def show_data(data, padsize=1, padval=0):
+    data -= data.min()
+    data /= data.max()
+
+    # force the number of filters to be square
+    n = int(np.ceil(np.sqrt(data.shape[0])))
+    padding = ((0, n ** 2 - data.shape[0]), (0, padsize), (0, padsize)) + ((0, 0),) * (data.ndim - 3)
+    data = np.pad(data, padding, mode='constant', constant_values=(padval, padval))
+
+    # tile the filters into an image
+    data = data.reshape((n, n) + data.shape[1:]).transpose((0, 2, 1, 3) + tuple(range(4, data.ndim + 1)))
+    data = data.reshape((n * data.shape[1], n * data.shape[3]) + data.shape[4:])
+    plt.figure()
+    plt.imshow(data, cmap='gray')
+    plt.axis('off')
+    plt.show()
+
+
+plt.rcParams['figure.figsize'] = (8, 8)
+plt.rcParams['image.interpolation'] = 'nearest'
+plt.rcParams['image.cmap'] = 'gray'
+
+#显示第一个卷积层的输出数据和权值（filter）
+show_data(net.blobs['conv1/7x7_s2'].data[0])
+print net.blobs['conv1/7x7_s2'].data.shape
+show_data(net.params['conv1/7x7_s2'][0].data.reshape(64*3,7,7))
+print net.params['conv1/7x7_s2'][0].data.shape
+
+
+show_data(net.blobs['inception_5b/pool_proj'].data[0])  #输出该张图片经过inception_5b/pool_proj层的数据,其实就是将多卷积展开成一张图。
+print net.blobs['inception_5b/pool_proj'].data.shape
+
+# 最后一层输入属于某个类的概率
+feat = net.blobs['prob'].data[0]  #取出是prob的最后类别。
+print feat
+print len(feat)
+plt.plot(feat.flat)   #绘制类别这折线图。
+plt.show()
